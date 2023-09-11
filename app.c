@@ -3,6 +3,13 @@
 #include <stdio.h>
 #include <math.h>
 
+#define MAX_NODES 1024
+#define MAX_GATES 1024
+#define MAX_CONNECTIONS 16
+#define MAX_INPUTS 16
+#define NODE_RADIUS 15
+#define GATE_WIDTH 50
+
 typedef struct
 {
     int x, y;
@@ -10,7 +17,7 @@ typedef struct
     gboolean is_input;
     gboolean state;
     int connection_count;
-    int connections[10];
+    int connections[MAX_CONNECTIONS];
 } Node;
 
 typedef struct
@@ -20,9 +27,9 @@ typedef struct
     int start_node;
     int node_count;
     int input_count;
-    int inputs[16];
+    int inputs[MAX_INPUTS];
     int output_count;
-    int outputs[16];
+    int outputs[MAX_INPUTS];
 } Gate;
 
 typedef struct
@@ -30,10 +37,10 @@ typedef struct
     const char *name;
     int node_count;
     int input_count;
-    int inputs[16];
+    int inputs[MAX_INPUTS];
     int output_count;
-    int outputs[16];
-    Node nodes[100];
+    int outputs[MAX_INPUTS];
+    Node nodes[MAX_NODES];
 } SavedGate;
 
 typedef struct
@@ -52,13 +59,13 @@ int input_count = 1;
 int output_count = 1;
 
 int node_count = 0;
-Node nodes[132];
+Node nodes[MAX_NODES];
 
 int gate_count = 0;
-Gate gates[100];
+Gate gates[MAX_GATES];
 
 int saved_gate_count = 0;
-SavedGate saved_gates[100];
+SavedGate saved_gates[MAX_GATES];
 
 int current_input = -1;
 int current_output = -1;
@@ -77,7 +84,7 @@ static gboolean on_draw(GtkWidget *drawing_area, cairo_t *cr)
         double r = 1, g = nodes[i].state ? 0 : 1, b = nodes[i].state ? 0 : 1;
 
         cairo_set_source_rgb(cr, r, g, b);
-        cairo_arc(cr, nodes[i].x, nodes[i].y, 15, 0, 2 * G_PI);
+        cairo_arc(cr, nodes[i].x, nodes[i].y, NODE_RADIUS, 0, 2 * G_PI);
         cairo_fill(cr);
 
         // draw connections
@@ -95,7 +102,7 @@ static gboolean on_draw(GtkWidget *drawing_area, cairo_t *cr)
         double r = 1, g = nodes[i].state ? 0 : 1, b = nodes[i].state ? 0 : 1;
 
         cairo_set_source_rgb(cr, r, g, b);
-        cairo_arc(cr, nodes[i].x, nodes[i].y, 15, 0, 2 * G_PI);
+        cairo_arc(cr, nodes[i].x, nodes[i].y, NODE_RADIUS, 0, 2 * G_PI);
         cairo_fill(cr);
     }
 
@@ -103,7 +110,7 @@ static gboolean on_draw(GtkWidget *drawing_area, cairo_t *cr)
     for (int i = 0; i < gate_count; i++)
     {
         cairo_set_source_rgb(cr, 0.5, 0.5, 0.5);
-        cairo_rectangle(cr, gates[i].x, gates[i].y, 50, gates[i].height);
+        cairo_rectangle(cr, gates[i].x, gates[i].y, GATE_WIDTH, gates[i].height);
         cairo_fill(cr);
 
         cairo_set_source_rgb(cr, 1, 1, 1);
@@ -120,7 +127,7 @@ static gboolean on_draw(GtkWidget *drawing_area, cairo_t *cr)
             double r = 1, g = nodes[input_index].state ? 0 : 1, b = nodes[input_index].state ? 0 : 1;
 
             cairo_set_source_rgb(cr, r, g, b);
-            cairo_arc(cr, nodes[input_index].x, nodes[input_index].y, 15, 0, 2 * G_PI);
+            cairo_arc(cr, nodes[input_index].x, nodes[input_index].y, NODE_RADIUS, 0, 2 * G_PI);
             cairo_fill(cr);
         }
 
@@ -131,7 +138,7 @@ static gboolean on_draw(GtkWidget *drawing_area, cairo_t *cr)
             double r = 1, g = nodes[output_index].state ? 0 : 1, b = nodes[output_index].state ? 0 : 1;
 
             cairo_set_source_rgb(cr, r, g, b);
-            cairo_arc(cr, nodes[output_index].x, nodes[output_index].y, 15, 0, 2 * G_PI);
+            cairo_arc(cr, nodes[output_index].x, nodes[output_index].y, NODE_RADIUS, 0, 2 * G_PI);
             cairo_fill(cr);
 
             // draw connections
@@ -154,13 +161,15 @@ static void setup_input_nodes(int height)
     int x_padding = 30;
     int y_padding = 45;
 
-    int input_height = (input_count - 1) * 3 * 15;
+    int input_height = (input_count - 1) * 3 * NODE_RADIUS;
     int input_y_start = (height / 2) - (input_height / 2);
 
     for (int i = 0; i < input_count; i++)
     {
         nodes[i].x = x_padding;
         nodes[i].y = input_y_start + (i * y_padding);
+        nodes[i].gate_type = -1;
+        nodes[i].is_input = TRUE;
     }
 }
 
@@ -169,13 +178,15 @@ static void setup_output_nodes(int height, int width)
     int x_padding = 30;
     int y_padding = 45;
 
-    int output_height = (output_count - 1) * 3 * 15;
+    int output_height = (output_count - 1) * 3 * NODE_RADIUS;
     int output_y_start = (height / 2) - (output_height / 2);
 
     for (int i = 16; i < (16 + output_count); i++)
     {
         nodes[i].x = width - x_padding;
         nodes[i].y = output_y_start + ((i - 16) * y_padding);
+        nodes[i].gate_type = -1;
+        nodes[i].is_input = FALSE;
     }
 }
 
@@ -195,7 +206,7 @@ int find_main_input_in_focus(int x, int y)
         double dy = y - nodes[i].y;
         double distance = sqrt(dx * dx + dy * dy);
 
-        if (distance <= 15)
+        if (distance <= NODE_RADIUS)
         {
             return i;
         }
@@ -212,7 +223,7 @@ int find_main_output_in_focus(int x, int y)
         double dy = y - nodes[i].y;
         double distance = sqrt(dx * dx + dy * dy);
 
-        if (distance <= 15)
+        if (distance <= NODE_RADIUS)
         {
             return i;
         }
@@ -233,7 +244,7 @@ int find_gate_input_in_focus(int x, int y)
             double dy = y - nodes[input_index].y;
             double distance = sqrt(dx * dx + dy * dy);
 
-            if (distance <= 15)
+            if (distance <= NODE_RADIUS)
             {
                 return input_index;
             }
@@ -255,7 +266,7 @@ int find_gate_output_in_focus(int x, int y)
             double dy = y - nodes[output_index].y;
             double distance = sqrt(dx * dx + dy * dy);
 
-            if (distance <= 15)
+            if (distance <= NODE_RADIUS)
             {
                 return output_index;
             }
@@ -269,7 +280,7 @@ int find_gate_in_focus(int x, int y)
 {
     for (int i = 0; i < gate_count; i++)
     {
-        if (x >= gates[i].x && x <= gates[i].x + 50 &&
+        if (x >= gates[i].x && x <= gates[i].x + GATE_WIDTH &&
             y >= gates[i].y && y <= gates[i].y + gates[i].height)
         {
             return i;
@@ -385,11 +396,6 @@ static void calc_gate(int input_index)
         int conn_index = nodes[output].connections[i];
         nodes[conn_index].state = nodes[output].state;
 
-        // move to connected node / gate
-        /* if (nodes[conn_index].gate_type != -1)
-        {
-            calc_gate(conn_index);
-        } */
         calc_gate(conn_index);
     }
 }
@@ -432,8 +438,8 @@ void add_gate(int type, int x, int y)
     if (type == 0)
     {
         // gate type 0 -> NOT gate
-        Node not_input = {x, y + 15, 0, TRUE, FALSE, 0, {}};
-        Node not_output = {x + 50, y + 15, 0, FALSE, TRUE, 0, {}};
+        Node not_input = {x, y + NODE_RADIUS, 0, TRUE, FALSE, 0, {}};
+        Node not_output = {x + GATE_WIDTH, y + NODE_RADIUS, 0, FALSE, TRUE, 0, {}};
         nodes[32 + node_count] = not_input;
         nodes[33 + node_count] = not_output;
 
@@ -448,7 +454,7 @@ void add_gate(int type, int x, int y)
         // gate type 1 -> AND gate
         Node and_inputA = {x, y, 1, TRUE, FALSE, 0, {}};
         Node and_inputB = {x, y + 45, 1, TRUE, FALSE, 0, {}};
-        Node and_output = {x + 50, y + 22, 1, FALSE, FALSE, 0, {}};
+        Node and_output = {x + GATE_WIDTH, y + 22, 1, FALSE, FALSE, 0, {}};
         nodes[32 + node_count] = and_inputA;
         nodes[33 + node_count] = and_inputB;
         nodes[34 + node_count] = and_output;
@@ -563,8 +569,8 @@ void add_saved_gate(GtkWidget *menuitem, AddCallback *callback)
     SavedGate saved_gate = saved_gates[callback->type];
 
     Gate new_gate;
-    new_gate.x = 200;
-    new_gate.y = 200;
+    new_gate.x = callback->x;
+    new_gate.y = callback->y;
     new_gate.start_node = 32 + node_count;
     new_gate.name = saved_gate.name;
     new_gate.node_count = saved_gate.node_count;
@@ -589,12 +595,12 @@ void add_saved_gate(GtkWidget *menuitem, AddCallback *callback)
     int _output_count = saved_gate.output_count;
 
     int max = _input_count > _output_count ? _input_count : _output_count;
-    new_gate.height = max > 1 ? 15 * 3 * (max - 1) : 15 * 2;
+    new_gate.height = max > 1 ? NODE_RADIUS * 3 * (max - 1) : NODE_RADIUS * 2;
 
     // position new gate inputs
     for (int i = 0; i < _input_count; i++)
     {
-        int y_offset = _input_count < max || _input_count == 1 ? (i + 1) * (new_gate.height / (_input_count + 1)) : i * 15 * 3;
+        int y_offset = _input_count < max || _input_count == 1 ? (i + 1) * (new_gate.height / (_input_count + 1)) : i * NODE_RADIUS * 3;
 
         int input_index = saved_gate.inputs[i] + node_count_copy;
         new_gate.inputs[i] = input_index;
@@ -607,12 +613,12 @@ void add_saved_gate(GtkWidget *menuitem, AddCallback *callback)
     // position new gate outputs
     for (int i = 0; i < _output_count; i++)
     {
-        int y_offset = _output_count < max || _output_count == 1 ? (i + 1) * (new_gate.height / (_output_count + 1)) : i * 15 * 3;
+        int y_offset = _output_count < max || _output_count == 1 ? (i + 1) * (new_gate.height / (_output_count + 1)) : i * NODE_RADIUS * 3;
 
         int output_index = saved_gate.outputs[i] + node_count_copy;
         new_gate.outputs[i] = output_index;
 
-        nodes[output_index].x = new_gate.x + 50;
+        nodes[output_index].x = new_gate.x + GATE_WIDTH;
         nodes[output_index].y = new_gate.y + y_offset;
     }
     new_gate.output_count = _output_count;
@@ -871,20 +877,20 @@ static gboolean on_motion_notify(GtkWidget *drawing_area, GdkEventMotion *event)
         int widget_width = gtk_widget_get_allocated_width(drawing_area);
         int widget_height = gtk_widget_get_allocated_height(drawing_area);
 
-        gates[current_gate].x = get_bounding_position(event->x - drag_offset_x, widget_width - 50, 0);
+        gates[current_gate].x = get_bounding_position(event->x - drag_offset_x, widget_width - GATE_WIDTH, 0);
         gates[current_gate].y = get_bounding_position(event->y - drag_offset_y, widget_height - GATE_HEIGHT, 0);
 
         for (int i = 0; i < _input_count; i++)
         {
-            int y_offset = _input_count < max || _input_count == 1 ? (i + 1) * (GATE_HEIGHT / (_input_count + 1)) : i * 15 * 3;
-            nodes[gates[current_gate].inputs[i]].x = get_bounding_position(event->x - drag_offset_x, widget_width - 50, 0);
+            int y_offset = _input_count < max || _input_count == 1 ? (i + 1) * (GATE_HEIGHT / (_input_count + 1)) : i * NODE_RADIUS * 3;
+            nodes[gates[current_gate].inputs[i]].x = get_bounding_position(event->x - drag_offset_x, widget_width - GATE_WIDTH, 0);
             nodes[gates[current_gate].inputs[i]].y = get_bounding_position(event->y - drag_offset_y + y_offset, widget_height - GATE_HEIGHT + y_offset, y_offset);
         }
 
         for (int i = 0; i < _output_count; i++)
         {
-            int y_offset = _output_count < max || _output_count == 1 ? (i + 1) * (GATE_HEIGHT / (_output_count + 1)) : i * 15 * 3;
-            nodes[gates[current_gate].outputs[i]].x = get_bounding_position(event->x - drag_offset_x + 50, widget_width, 50);
+            int y_offset = _output_count < max || _output_count == 1 ? (i + 1) * (GATE_HEIGHT / (_output_count + 1)) : i * NODE_RADIUS * 3;
+            nodes[gates[current_gate].outputs[i]].x = get_bounding_position(event->x - drag_offset_x + GATE_WIDTH, widget_width, GATE_WIDTH);
             nodes[gates[current_gate].outputs[i]].y = get_bounding_position(event->y - drag_offset_y + y_offset, widget_height - GATE_HEIGHT + y_offset, y_offset);
         }
 
@@ -902,7 +908,8 @@ static void on_input_spin_button_value_changed(GtkSpinButton *spin_button, GtkWi
 
     if (new_input_count < input_count)
     {
-        nodes[new_input_count] = (Node){0};
+        nodes[new_input_count].state = FALSE;
+        nodes[new_input_count].connection_count = 0;
     }
     input_count = new_input_count;
 
@@ -918,7 +925,8 @@ static void on_output_spin_button_value_changed(GtkSpinButton *spin_button, GtkW
 
     if (new_output_count < output_count)
     {
-        nodes[16 + new_output_count] = (Node){0};
+        nodes[16 + new_output_count].state = FALSE;
+        nodes[16 + new_output_count].connection_count = 0;
     }
     output_count = new_output_count;
 
