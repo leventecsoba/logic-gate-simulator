@@ -593,14 +593,18 @@ void add_saved_gate(GtkWidget *menuitem, AddCallback *callback)
 
     int _input_count = saved_gate.input_count;
     int _output_count = saved_gate.output_count;
-
     int max = _input_count > _output_count ? _input_count : _output_count;
-    new_gate.height = max > 1 ? NODE_RADIUS * 3 * (max - 1) : NODE_RADIUS * 2;
+
+    // int min_padding = 5;
+    int max_padding = NODE_RADIUS;
+    int padding = max_padding - (max - 1);
+
+    new_gate.height = max == 1 ? 30 : ((max - 1) * NODE_RADIUS * 2) + ((max - 1) * padding);
 
     // position new gate inputs
     for (int i = 0; i < _input_count; i++)
     {
-        int y_offset = _input_count < max || _input_count == 1 ? (i + 1) * (new_gate.height / (_input_count + 1)) : i * NODE_RADIUS * 3;
+        int y_offset = _input_count == 1 ? new_gate.height / 2 : i * (new_gate.height / (_input_count - 1));
 
         int input_index = saved_gate.inputs[i] + node_count_copy;
         new_gate.inputs[i] = input_index;
@@ -613,7 +617,7 @@ void add_saved_gate(GtkWidget *menuitem, AddCallback *callback)
     // position new gate outputs
     for (int i = 0; i < _output_count; i++)
     {
-        int y_offset = _output_count < max || _output_count == 1 ? (i + 1) * (new_gate.height / (_output_count + 1)) : i * NODE_RADIUS * 3;
+        int y_offset = _output_count == 1 ? new_gate.height / 2 : i * (new_gate.height / (_output_count - 1));
 
         int output_index = saved_gate.outputs[i] + node_count_copy;
         new_gate.outputs[i] = output_index;
@@ -872,8 +876,6 @@ static gboolean on_motion_notify(GtkWidget *drawing_area, GdkEventMotion *event)
         int _output_count = gates[current_gate].output_count;
         int GATE_HEIGHT = gates[current_gate].height;
 
-        int max = _input_count > _output_count ? _input_count : _output_count;
-
         int widget_width = gtk_widget_get_allocated_width(drawing_area);
         int widget_height = gtk_widget_get_allocated_height(drawing_area);
 
@@ -882,14 +884,14 @@ static gboolean on_motion_notify(GtkWidget *drawing_area, GdkEventMotion *event)
 
         for (int i = 0; i < _input_count; i++)
         {
-            int y_offset = _input_count < max || _input_count == 1 ? (i + 1) * (GATE_HEIGHT / (_input_count + 1)) : i * NODE_RADIUS * 3;
+            int y_offset = _input_count == 1 ? GATE_HEIGHT / 2 : i * (GATE_HEIGHT / (_input_count - 1));
             nodes[gates[current_gate].inputs[i]].x = get_bounding_position(event->x - drag_offset_x, widget_width - GATE_WIDTH, 0);
             nodes[gates[current_gate].inputs[i]].y = get_bounding_position(event->y - drag_offset_y + y_offset, widget_height - GATE_HEIGHT + y_offset, y_offset);
         }
 
         for (int i = 0; i < _output_count; i++)
         {
-            int y_offset = _output_count < max || _output_count == 1 ? (i + 1) * (GATE_HEIGHT / (_output_count + 1)) : i * NODE_RADIUS * 3;
+            int y_offset = _output_count == 1 ? GATE_HEIGHT / 2 : i * (GATE_HEIGHT / (_output_count - 1));
             nodes[gates[current_gate].outputs[i]].x = get_bounding_position(event->x - drag_offset_x + GATE_WIDTH, widget_width, GATE_WIDTH);
             nodes[gates[current_gate].outputs[i]].y = get_bounding_position(event->y - drag_offset_y + y_offset, widget_height - GATE_HEIGHT + y_offset, y_offset);
         }
